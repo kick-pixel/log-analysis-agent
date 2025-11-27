@@ -1,0 +1,57 @@
+11-26 14:00:05.123  1234  1256 I SystemServer: System server startup complete
+11-26 14:00:05.234  1234  1256 I ActivityManager: Start proc com.android.systemui
+11-26 14:00:06.345  2345  2345 I WifiService: WiFi service started
+11-26 14:00:07.456  2345  2367 I WifiService: Connected to SSID: CarNetwork
+11-26 14:00:08.567  3456  3478 I AudioService: Audio service initialized
+11-26 14:00:09.678  3456  3478 I AudioFlinger: AudioFlinger created
+11-26 14:00:10.789  4567  4589 I CameraService: Camera service starting...
+11-26 14:00:10.890  4567  4589 I CameraService: Camera device 0 registered (rear camera)
+11-26 14:00:10.991  4567  4589 I CameraService: Camera device 1 registered (front camera)
+11-26 14:00:11.123  4567  4589 I CameraService: Camera service ready
+11-26 14:00:12.234  5678  5678 I CarService: Car service started
+11-26 14:00:12.345  5678  5690 I CarService: Monitoring gear position
+11-26 14:00:15.456  6789  6789 I BluetoothService: Bluetooth adapter initialized
+11-26 14:00:15.567  6789  6801 I BluetoothService: Scanning for devices...
+11-26 14:00:16.678  6789  6801 I BluetoothService: Connected to device: iPhone_User
+11-26 14:00:20.789  7890  7890 I NavigationApp: Maps application started
+11-26 14:00:20.890  7890  7912 I NavigationApp: Loading map data...
+11-26 14:00:25.123  8901  8901 W PowerManager: Battery level: 25%
+11-26 14:00:30.234  9012  9012 I MediaPlayer: Music playback started
+11-26 14:00:35.345  1234  1256 I SystemServer: Memory available: 2.3GB
+11-26 14:28:45.456  5678  5690 I CarService: Gear changed to REVERSE
+11-26 14:28:45.567  5678  5690 I CarService: Triggering reverse camera
+11-26 14:28:45.678  4567  4589 I CameraService: Opening camera device 0 for reverse view
+11-26 14:28:45.789  4567  4601 W CameraService: Camera buffer allocation started
+11-26 14:28:45.890  4567  4601 W CameraService: High memory pressure detected
+11-26 14:28:45.991  4567  4601 E CameraService: Failed to allocate camera buffer: out of memory
+11-26 14:28:46.012  4567  4601 E CameraService: Camera device 0 error 3 (BUFFER_ERROR)
+11-26 14:28:46.123  4567  4589 E CameraService: Unable to start camera stream
+11-26 14:28:46.234  1234  1267 W ActivityManager: Low memory: killing background processes
+11-26 14:28:46.345  1234  1267 I ActivityManager: Killing com.example.unusedapp (PID 10123)
+11-26 14:28:46.456  10123 10123 I Process: Sending signal. PID: 10123 SIG: 9
+11-26 14:28:46.567  2345  2345 W SystemUI: Camera error notification triggered
+11-26 14:28:46.678  2345  2389 E SystemUI: NullPointerException in CameraOverlay.updateView
+11-26 14:28:46.789  2345  2389 E SystemUI:     at com.android.systemui.camera.CameraOverlay.updateView(CameraOverlay.java:234)
+11-26 14:28:46.890  2345  2389 E SystemUI:     at com.android.systemui.camera.CameraController.onCameraError(CameraController.java:456)
+11-26 14:28:46.991  2345  2389 E SystemUI:     at android.hardware.camera2.CameraDevice$StateCallback.onError(CameraDevice.java:789)
+11-26 14:28:47.012  1234  1267 F SystemUI: Fatal exception in main thread
+11-26 14:28:47.123  1234  1267 F SystemUI: java.lang.OutOfMemoryError: Failed to allocate a 8294400 byte allocation with 4194304 free bytes and 3MB until OOM
+11-26 14:28:47.234  1234  1267 F SystemUI:     at android.graphics.Bitmap.nativeCreate(Native Method)
+11-26 14:28:47.345  1234  1267 F SystemUI:     at android.graphics.Bitmap.createBitmap(Bitmap.java:1023)
+11-26 14:28:47.456  1234  1267 F SystemUI:     at com.android.systemui.camera.CameraPreview.updateTexture(CameraPreview.java:567)
+11-26 14:28:47.567  1234  1267 I Process: Process com.android.systemui (PID 2345) killed by signal 6 (SIGABRT)
+11-26 14:28:47.678  1234  1256 W ActivityManager: Process com.android.systemui has died: fore TOP
+11-26 14:28:47.789  1234  1256 I ActivityManager: Scheduling restart of crashed service SystemUI/.SystemUIService
+11-26 14:28:48.890  1234  1256 I ActivityManager: Start proc com.android.systemui (restarted)
+11-26 14:28:49.123  2456  2456 I SystemUI: SystemUI restarted after crash
+11-26 14:28:49.234  5678  5690 I CarService: Gear changed to DRIVE
+11-26 14:28:49.345  4567  4589 I CameraService: Camera device 0 closed
+11-26 14:28:50.456  6789  6801 W BluetoothService: Connection unstable, RSSI: -85dBm
+11-26 14:29:00.567  7890  7912 I NavigationApp: Route calculation complete
+11-26 14:29:05.678  8901  8901 I MediaPlayer: Track changed: Song_Name.mp3
+11-26 14:29:10.789  3456  3478 I AudioService: Volume changed: 15/30
+11-26 14:29:15.890  1234  1256 I SystemServer: System running normally
+11-26 14:29:20.991  9012  9012 I TelephonyService: Signal strength: GOOD (4/5 bars)
+11-26 14:29:25.123  1234  1256 I ActivityManager: Memory available: 2.8GB
+11-26 14:29:30.234  6789  6801 I BluetoothService: Connection stable, RSSI: -65dBm
+

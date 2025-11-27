@@ -1,0 +1,83 @@
+# 智能座舱日志分析Agent配置文件
+
+# LLM配置
+llm:
+  provider: openai  # 支持: openai, azure, local
+  model: gpt-4o  # 或 gpt-4-turbo, gpt-3.5-turbo
+  temperature: 0.1  # 降低温度以提高分析准确性
+  max_tokens: 4000
+  request_timeout: 60  # API请求超时时间(秒)
+
+# 存储配置
+storage:
+  data_dir: ./data  # 数据存储根目录
+  db_path: ./data/logs.db  # SQLite数据库路径
+  vector_db_path: ./data/chroma_db  # ChromaDB向量库路径
+  raw_logs_dir: ./data/raw_logs  # 原始日志文件存储目录
+
+# 日志解析配置
+parser:
+  # 保留的日志级别（过滤掉DEBUG和VERBOSE以降低数据量）
+  log_levels:
+    - INFO
+    - WARN
+    - ERROR
+    - FATAL
+  
+  # Android Logcat时间格式
+  time_format: "%m-%d %H:%M:%S.%f"
+  
+  # 单次处理的最大日志行数（防止内存溢出）
+  max_lines_per_batch: 10000
+  
+  # 是否启用日志降噪（过滤重复日志）
+  enable_deduplication: true
+
+# Agent配置
+agent:
+  # Agent最大迭代次数（防止无限循环）
+  max_iterations: 10
+  
+  # 是否显示详细的工具调用过程
+  verbose: true
+  
+  # 单次工具调用返回的最大日志条数
+  max_results_per_query: 50
+  
+  # 上下文窗口大小（获取某条日志前后N行）
+  context_window_size: 100
+  
+  # System Prompt
+  system_prompt: |
+    你是一位资深的车载系统（Android/Linux）日志分析专家，拥有15年的故障排查经验。
+    你擅长分析Android Logcat、Kernel Log等多种日志格式。
+    
+    你的工作流程：
+    1. 理解用户的问题描述（故障现象、发生时间）
+    2. 使用工具检索相关日志（时间范围、关键词、模块）
+    3. 定位关键错误日志和堆栈信息
+    4. 分析上下文，推断根本原因
+    5. 给出清晰的结论和建议
+    
+    输出格式要求：
+    - **故障时间点**：精确到秒
+    - **关键日志**：展示核心错误信息
+    - **根因分析**：解释为什么发生故障
+    - **建议方案**：给出可行的修复建议
+    
+    注意：如果无法确定根本原因，请明确说明，不要编造信息。
+
+# 界面配置
+interface:
+  title: "🚗 智能座舱日志分析 AI Agent"
+  page_icon: "🔍"
+  layout: wide
+  
+  # 示例问题（引导用户）
+  example_questions:
+    - "查找所有崩溃(Crash)相关的日志"
+    - "分析14:00到14:30之间的错误"
+    - "CameraService有什么异常吗？"
+    - "帮我看看为什么蓝牙断开连接了"
+    - "统计各模块的错误数量"
+
