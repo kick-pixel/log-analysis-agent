@@ -281,7 +281,7 @@ class VectorSearchEngine:
                     }
                     matched_logs.append(log_data)
             
-            logger.info(f"Semantic search for '{query}' returned {len(matched_logs)} results")
+            print(f"DEBUG: Semantic search for '{query}' returned {len(matched_logs)} results")
             return matched_logs
             
         except Exception as e:

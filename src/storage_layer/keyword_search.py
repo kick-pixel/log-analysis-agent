@@ -238,8 +238,7 @@ class KeywordSearchEngine:
         # 转换为字典列表
         logs = [dict(row) for row in results]
 
-        logger.info(
-            f"Keyword search '{keywords}' returned {len(logs)} results")
+        print(f"DEBUG: Keyword search '{keywords}' returned {len(logs)} results")
         return logs
 
     def get_logs_by_time_range(

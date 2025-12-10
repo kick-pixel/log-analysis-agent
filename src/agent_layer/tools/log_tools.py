@@ -55,7 +55,7 @@ def query_logs_by_time_range(
     try:
         # 获取当前会话ID
         session_id = _orchestrator.current_session_id if _orchestrator else None
-        logger.info(f"🔍 query_logs_by_time_range - session_id: {session_id}")
+        print(f"DEBUG: query_logs_by_time_range - session_id: {session_id}")
         
         results = _keyword_engine.get_logs_by_time_range(
             start_time=start_time,
@@ -93,7 +93,7 @@ def query_logs_by_time_range(
         return ''.join(output)
         
     except Exception as e:
-        logger.error(f"query_logs_by_time_range error: {e}")
+        print(f"ERROR: query_logs_by_time_range error: {e}")
         return f"查询时发生错误: {str(e)}"
 
 
@@ -121,7 +121,7 @@ def search_error_keywords(
     try:
         # 获取当前会话ID
         session_id = _orchestrator.current_session_id if _orchestrator else None
-        logger.info(f"🔍 search_error_keywords - session_id: {session_id}, keywords: {keywords}")
+        print(f"DEBUG: search_error_keywords - session_id: {session_id}, keywords: {keywords}")
         
         results = _keyword_engine.search_keywords(
             keywords=keywords,
@@ -161,7 +161,7 @@ def search_error_keywords(
         return ''.join(output)
         
     except Exception as e:
-        logger.error(f"search_error_keywords error: {e}")
+        print(f"ERROR: search_error_keywords error: {e}")
         return f"搜索时发生错误: {str(e)}"
 
 
@@ -185,7 +185,7 @@ def semantic_search_logs(query: str, n_results: int = 10) -> str:
     try:
         # 获取当前会话ID
         session_id = _orchestrator.current_session_id if _orchestrator else None
-        logger.info(f"🔍 semantic_search_logs - session_id: {session_id}, query: {query}")
+        print(f"DEBUG: semantic_search_logs - session_id: {session_id}, query: {query}")
         
         results = _vector_engine.semantic_search(
             query=query,
@@ -215,7 +215,7 @@ def semantic_search_logs(query: str, n_results: int = 10) -> str:
         return ''.join(output)
         
     except Exception as e:
-        logger.error(f"semantic_search_logs error: {e}")
+        print(f"ERROR: semantic_search_logs error: {e}")
         return f"语义搜索时发生错误: {str(e)}"
 
 
@@ -238,7 +238,7 @@ def filter_logs_by_tag(tag: str, limit: int = 20) -> str:
     try:
         # 获取当前会话ID
         session_id = _orchestrator.current_session_id if _orchestrator else None
-        logger.info(f"🔍 filter_logs_by_tag - session_id: {session_id}, tag: {tag}")
+        print(f"DEBUG: filter_logs_by_tag - session_id: {session_id}, tag: {tag}")
         
         results = _keyword_engine.filter_by_tag(tag=tag, session_id=session_id, limit=limit)
         
@@ -266,7 +266,7 @@ def filter_logs_by_tag(tag: str, limit: int = 20) -> str:
         return ''.join(output)
         
     except Exception as e:
-        logger.error(f"filter_logs_by_tag error: {e}")
+        print(f"ERROR: filter_logs_by_tag error: {e}")
         return f"过滤时发生错误: {str(e)}"
 
 
@@ -313,7 +313,7 @@ def get_log_context(log_id: int, window_size: int = 20) -> str:
         return ''.join(output)
         
     except Exception as e:
-        logger.error(f"get_log_context error: {e}")
+        print(f"ERROR: get_log_context error: {e}")
         return f"获取上下文时发生错误: {str(e)}"
 
 
@@ -360,7 +360,7 @@ def get_error_statistics(session_id: Optional[str] = None) -> str:
         return ''.join(output)
         
     except Exception as e:
-        logger.error(f"get_error_statistics error: {e}")
+        print(f"ERROR: get_error_statistics error: {e}")
         return f"获取统计信息时发生错误: {str(e)}"
 
 

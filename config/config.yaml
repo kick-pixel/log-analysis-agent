@@ -39,7 +39,7 @@ agent:
   max_iterations: 10
   
   # 是否显示详细的工具调用过程
-  verbose: true
+  verbose: false
   
   # 单次工具调用返回的最大日志条数
   max_results_per_query: 50
