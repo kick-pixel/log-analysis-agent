@@ -144,22 +144,7 @@ class LogAnalysisAgent:
             base_url=base_url
         )
 
-    def _node_wrapper(self, node_name: str, func):
-        """Wrapper to add hooks around node execution."""
-        @functools.wraps(func)
-        def wrapper(state: AgentState):
-            # Pre-execution hooks - log node entry
-            logger.info(f"======================== Entering node: {node_name} ========================")
-            
-            # Execute the wrapped function
-            result = func(state)
-            
-            # Post-execution hooks - log node completion
-            logger.info(f"======================== FINISHED NODE: {node_name} ========================")
-            
-            # Could add state inspection or modification here
-            return result
-        return wrapper
+
 
     # --- Node Functions ---
 
@@ -213,43 +198,7 @@ class LogAnalysisAgent:
             logger.error(f"Error in node_fallback_to_semantic: {e}", exc_info=True)
             return {"messages": [AIMessage(content=f"Fallback执行出错: {str(e)}")]}
 
-    # --- Tool Execution Nodes (Custom implementations to enable wrapper) ---
-    
-    def node_execute_time_query(self, state: AgentState):
-        """执行时间范围查询工具"""
-        from langgraph.prebuilt import ToolNode
-        tool_node = ToolNode([query_logs_by_time_range])
-        return tool_node.invoke(state)
-    
-    def node_execute_keyword_search(self, state: AgentState):
-        """执行关键词搜索工具"""
-        from langgraph.prebuilt import ToolNode
-        tool_node = ToolNode([search_error_keywords])
-        return tool_node.invoke(state)
-    
-    def node_execute_semantic_search(self, state: AgentState):
-        """执行语义搜索工具"""
-        from langgraph.prebuilt import ToolNode
-        tool_node = ToolNode([semantic_search_logs])
-        return tool_node.invoke(state)
-    
-    def node_execute_filter(self, state: AgentState):
-        """执行Tag过滤工具"""
-        from langgraph.prebuilt import ToolNode
-        tool_node = ToolNode([filter_logs_by_tag])
-        return tool_node.invoke(state)
-    
-    def node_execute_context(self, state: AgentState):
-        """执行上下文获取工具"""
-        from langgraph.prebuilt import ToolNode
-        tool_node = ToolNode([get_log_context])
-        return tool_node.invoke(state)
-    
-    def node_execute_stats(self, state: AgentState):
-        """执行统计工具"""
-        from langgraph.prebuilt import ToolNode
-        tool_node = ToolNode([get_error_statistics])
-        return tool_node.invoke(state)
+
 
     # --- Routing Logic ---
 
@@ -327,18 +276,18 @@ class LogAnalysisAgent:
         workflow = StateGraph(AgentState)
 
         # 1. 添加Agent节点
-        workflow.add_node("agent", self._node_wrapper("agent", self.call_model))
+        workflow.add_node("agent", self.call_model)
 
-        # 2. 添加工具节点 (使用自定义函数以支持wrapper)
-        workflow.add_node("node_time_query", self._node_wrapper("node_time_query", self.node_execute_time_query))
-        workflow.add_node("node_search_keywords", self._node_wrapper("node_search_keywords", self.node_execute_keyword_search))
-        workflow.add_node("node_semantic_search", self._node_wrapper("node_semantic_search", self.node_execute_semantic_search))
-        workflow.add_node("node_filter", self._node_wrapper("node_filter", self.node_execute_filter))
-        workflow.add_node("node_context", self._node_wrapper("node_context", self.node_execute_context))
-        workflow.add_node("node_stats", self._node_wrapper("node_stats", self.node_execute_stats))
+        # 2. 添加工具节点 - 直接使用ToolNode
+        workflow.add_node("node_time_query", ToolNode([query_logs_by_time_range]))
+        workflow.add_node("node_search_keywords", ToolNode([search_error_keywords]))
+        workflow.add_node("node_semantic_search", ToolNode([semantic_search_logs]))
+        workflow.add_node("node_filter", ToolNode([filter_logs_by_tag]))
+        workflow.add_node("node_context", ToolNode([get_log_context]))
+        workflow.add_node("node_stats", ToolNode([get_error_statistics]))
         
         # 3. 添加Fallback节点
-        workflow.add_node("node_fallback_to_semantic", self._node_wrapper("node_fallback_to_semantic", self.node_fallback_to_semantic))
+        workflow.add_node("node_fallback_to_semantic", self.node_fallback_to_semantic)
 
         # 4. 设置入口
         workflow.set_entry_point("agent")
@@ -418,18 +367,7 @@ class LogAnalysisAgent:
             # 获取System Prompt
             agent_config = self.config.get('agent', {})
             system_prompt_content = agent_config.get('system_prompt', "You are a helpful assistant.")
-            
-            # 注意：LangGraph State中messages是append模式
-            # 为了保证System Prompt始终有效，一种方式是在create_graph时bind prompt，
-            # 或者我们在这里总是把它放在messages列表的最前面（如果StateGraph支持自动去重或合并的话）
-            # 最简单的做法：只传HumanMessage，System Prompt依靠LLM的记忆或者在call_model里处理
-            
-            # 修正：在call_model里处理System Prompt比较复杂，因为要维护history。
-            # 这里我们先手动构造一个包含SystemPrompt的消息列表传入，如果是新对话。
-            # 但由于我们不知道是否是新对话（除非查checkpointer），我们简化处理：
-            # 每次invoke都带上System Message可能导致重复。
-            # 策略：我们将其作为一次性的HumanMessage传入，或者依赖LangChain的SystemMessage
-            
+
             # 获取当前状态
             current_state = self.graph.get_state(config)
             
@@ -440,14 +378,59 @@ class LogAnalysisAgent:
             
             input_messages.append(HumanMessage(content=query))
 
-            # 调用Graph
-            final_state = self.graph.invoke(
+            # 使用 stream 获取节点执行信息
+            logger.info("="*80)
+            logger.info("开始执行 Graph...")
+            logger.info("="*80)
+            
+            final_messages = []
+            for event in self.graph.stream(
                 {"messages": input_messages},
-                config=config
-            )
+                config=config,
+                stream_mode="updates"  # 获取每个节点的更新
+            ):
+                # event 是一个字典: {node_name: node_output}
+                for node_name, node_output in event.items():
+                    # 记录节点执行
+                    logger.info(f"======================== Node: {node_name} ========================")
+                    
+                    if isinstance(node_output, dict):
+                        # 打印更新的键
+                        logger.info(f"  Updated keys: {list(node_output.keys())}")
+                        
+                        # 如果有 messages，记录消息数量
+                        if 'messages' in node_output:
+                            messages = node_output['messages']
+                            logger.info(f"  Added {len(messages)} message(s)")
+                            
+                            # 记录最后一条消息的类型和简要内容
+                            if messages:
+                                last_msg = messages[-1]
+                                msg_type = type(last_msg).__name__
+                                logger.info(f"  Last message type: {msg_type}")
+                                
+                                # 如果有 tool_calls，记录工具名
+                                if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
+                                    tool_names = [tc.get('name', 'unknown') for tc in last_msg.tool_calls]
+                                    logger.info(f"  Tool calls: {', '.join(tool_names)}")
+                                
+                                # 如果有内容，记录预览
+                                if hasattr(last_msg, 'content') and last_msg.content:
+                                    content_preview = str(last_msg.content)[:100].replace('\n', ' ')
+                                    logger.info(f"  Content preview: {content_preview}...")
+                    else:
+                        logger.info(f"  Update: {node_output}")
+                    
+                    logger.info("="*70)
+            
+            logger.info("Graph 执行完成")
+            logger.info("="*80)
+            
+            # 获取完整的最终状态
+            complete_state = self.graph.get_state(config)
+            final_messages = complete_state.values.get("messages", [])
 
             # 提取结果
-            final_messages = final_state.get("messages", [])
             answer = ""
             if final_messages:
                 last_msg = final_messages[-1]
