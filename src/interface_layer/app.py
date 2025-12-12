@@ -6,6 +6,11 @@ Streamlit Web界面
 作者: Log Analysis Team
 """
 
+from src.agent_layer.tools.log_tools import init_tools  # 确保导入init_tools
+from langchain_core.messages import HumanMessage, AIMessage
+# from src.agent_layer.orchestrator import LogAnalysisAgent
+from src.agent_layer.graph_orchestrator import LogAnalysisAgent
+
 import streamlit as st
 import os
 import yaml
@@ -30,9 +35,6 @@ else:
 # 设置环境变量以避免tokenizers警告
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
-from src.agent_layer.orchestrator import LogAnalysisAgent
-from langchain_core.messages import HumanMessage, AIMessage
-
 
 # 页面配置
 st.set_page_config(
@@ -43,6 +45,8 @@ st.set_page_config(
 )
 
 # 加载配置
+
+
 @st.cache_resource
 def load_config():
     """加载配置文件"""
@@ -55,55 +59,61 @@ def load_config():
         return {}
 
 
-from src.agent_layer.tools.log_tools import init_tools  # 确保导入init_tools
-
 # 初始化Agent
+
 @st.cache_resource
 def init_agent():
     """初始化Agent（单例模式）
-    
+
     关键修复：使用st.session_state保存Agent实例，
     确保整个会话使用同一个Agent对象，避免每次查询都重新创建
     """
     try:
         # 调试：打印session_state的所有键
-        logger.info(f"🔍 DEBUG: session_state keys = {list(st.session_state.keys())}")
-        
+        logger.info(
+            f"🔍 DEBUG: session_state keys = {list(st.session_state.keys())}")
+
         # 如果session_state中已有agent实例，直接返回（单例模式）
         if 'agent_instance' in st.session_state:
             agent = st.session_state['agent_instance']
-            logger.info(f"♻️ 复用现有Agent实例 (session_id={agent.current_session_id})")
-            
+            logger.info(
+                f"♻️ 复用现有Agent实例 (session_id={agent.current_session_id})")
+
             # ⚡️ 关键修复：每次获取缓存Agent时，必须重新绑定Tools！
             # Streamlit重载可能导致log_tools模块的全局变量丢失，必须重新注入
             init_tools(agent.keyword_engine, agent.vector_engine, agent)
             logger.info("🔗 已重新绑定Tools到Agent实例")
-            
+
             return agent
-        
+
         logger.info("❌ session_state中没有agent_instance，需要创建新实例")
-        
+
         # 检查API Key
         if not os.getenv('OPENAI_API_KEY'):
             st.error("⚠️ 未找到OPENAI_API_KEY环境变量")
             st.info("请在项目根目录创建.env文件，并设置OPENAI_API_KEY")
             st.stop()
-        
+
         logger.info("🆕 创建新的Agent实例")
         agent = LogAnalysisAgent(
             config_path=str(project_root / "config" / "config.yaml"),
             db_path=str(project_root / "data" / "logs.db"),
             vector_db_path=str(project_root / "data" / "chroma_db")
         )
-        
+        # agent = LogAnalysisAgent(
+        #     db_path="./data/test_graph_agent_logs.db",
+        #     vector_db_path="./data/test_graph_agent_chroma"
+        # )
+
         # 保存到session_state（单例模式）
         st.session_state['agent_instance'] = agent
-        
+
         # 首次创建也要绑定Tools（Agent初始化内部其实已经做了一次，但为了保险）
         init_tools(agent.keyword_engine, agent.vector_engine, agent)
-        
-        logger.info(f"💾 Agent实例已保存到session_state, keys now = {list(st.session_state.keys())}")
-        
+
+        logger.info(
+            f"💾 Agent实例已保存到session_state, keys now = {list(st.session_state.keys())}")
+
         return agent
     except Exception as e:
         st.error(f"❌ Agent初始化失败: {str(e)}")
@@ -123,47 +133,48 @@ def main():
     - 🤖 AI驱动的智能分析
     - 💬 自然语言对话交互
     """)
-    
+
     # 侧边栏
     with st.sidebar:
         st.header("📁 日志文件管理")
-        
+
         # 文件上传
         uploaded_file = st.file_uploader(
             "上传日志文件",
             type=['log', 'txt'],
             help="支持 .log 和 .txt 格式的Android Logcat日志"
         )
-        
+
         if uploaded_file:
             # 保存上传的文件
             temp_dir = project_root / "data" / "temp"
             temp_dir.mkdir(parents=True, exist_ok=True)
-            
+
             temp_file_path = temp_dir / uploaded_file.name
             with open(temp_file_path, 'wb') as f:
                 f.write(uploaded_file.getbuffer())
-            
+
             # 加载日志
             if st.button("🚀 解析并加载日志", use_container_width=True):
                 with st.spinner("正在解析日志..."):
                     agent = init_agent()
-                    
+
                     # 生成会话ID（使用文件名+时间戳）
                     session_id = f"{uploaded_file.name.split('.')[0]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                    
-                    result = agent.load_logs(str(temp_file_path), session_id=session_id)
-                    
+
+                    result = agent.load_logs(
+                        str(temp_file_path), session_id=session_id)
+
                     if result['success']:
                         st.success(f"✅ {result['message']}")
-                        
+
                         # 保存session_id到session state（关键修复）
                         st.session_state['current_session_id'] = session_id
                         st.session_state['log_loaded'] = True
-                        
+
                         # 同步到Agent实例（确保立即生效）
                         agent.current_session_id = session_id
-                        
+
                         # 显示统计信息
                         stats = result['statistics']
                         st.info(f"""
@@ -171,7 +182,7 @@ def main():
                         - 总日志数: {stats['total_count']}
                         - 时间范围: {stats['time_range']['start']} ~ {stats['time_range']['end']}
                         """)
-                        
+
                         # 显示级别分布
                         level_dist = stats['level_distribution']
                         st.write("**日志级别分布**:")
@@ -180,17 +191,17 @@ def main():
                             st.write(f"- {level}: {count} ({percentage:.1f}%)")
                     else:
                         st.error(f"❌ {result['message']}")
-        
+
         st.divider()
-        
+
         # 显示当前会话信息
         if 'current_session_id' in st.session_state:
             st.success(f"✅ 当前会话: {st.session_state['current_session_id']}")
         else:
             st.warning("⚠️ 尚未加载日志")
-        
+
         st.divider()
-        
+
         # 示例问题
         st.header("💡 示例问题")
         config = load_config()
@@ -200,22 +211,22 @@ def main():
             "CameraService有什么异常吗？",
             "帮我看看为什么蓝牙断开连接了"
         ])
-        
+
         for i, question in enumerate(example_questions):
             if st.button(question, key=f"example_{i}", use_container_width=True):
                 st.session_state['example_query'] = question
-        
+
         st.divider()
-        
+
         # 清除对话历史
         if st.button("🗑️ 清除对话历史", use_container_width=True):
             st.session_state['messages'] = []
             st.rerun()
-    
+
     # 主区域 - 对话界面
     if 'log_loaded' not in st.session_state or not st.session_state['log_loaded']:
         st.info("👈 请先在侧边栏上传并加载日志文件")
-        
+
         # 显示使用说明
         with st.expander("📖 使用说明", expanded=True):
             st.markdown("""
@@ -242,7 +253,7 @@ def main():
         # 初始化对话历史
         if 'messages' not in st.session_state:
             st.session_state['messages'] = []
-        
+
         # 显示对话历史
         chat_container = st.container()
         with chat_container:
@@ -253,73 +264,80 @@ def main():
                 elif isinstance(message, AIMessage):
                     with st.chat_message("assistant"):
                         st.write(message.content)
-        
+
         # 处理示例问题
         if 'example_query' in st.session_state:
             user_query = st.session_state['example_query']
             del st.session_state['example_query']
-            
+
             # 添加到历史
-            st.session_state['messages'].append(HumanMessage(content=user_query))
-            
+            st.session_state['messages'].append(
+                HumanMessage(content=user_query))
+
             # 显示用户消息
             with st.chat_message("user"):
                 st.write(user_query)
-            
+
             # 调用Agent
             with st.chat_message("assistant"):
                 with st.spinner("AI正在分析..."):
                     agent = init_agent()
                     logger.info(f"🔑 当前会话ID: {agent.current_session_id}")
-                    
-                    result = agent.analyze(user_query, chat_history=st.session_state['messages'][:-1])
-                    
+
+                    result = agent.analyze(
+                        user_query, chat_history=st.session_state['messages'][:-1])
+
                     if result['success']:
                         answer = result['answer']
                         st.write(answer)
-                        
+
                         # 添加到历史
-                        st.session_state['messages'].append(AIMessage(content=answer))
+                        st.session_state['messages'].append(
+                            AIMessage(content=answer))
                     else:
                         error_msg = f"分析失败: {result.get('error', '未知错误')}"
                         st.error(error_msg)
-                        st.session_state['messages'].append(AIMessage(content=error_msg))
-            
+                        st.session_state['messages'].append(
+                            AIMessage(content=error_msg))
+
             st.rerun()
-        
+
         # 用户输入
         user_input = st.chat_input("请输入你的问题...")
-        
+
         if user_input:
             # 添加到历史
-            st.session_state['messages'].append(HumanMessage(content=user_input))
-            
+            st.session_state['messages'].append(
+                HumanMessage(content=user_input))
+
             # 显示用户消息
             with st.chat_message("user"):
                 st.write(user_input)
-            
+
             # 调用Agent
             with st.chat_message("assistant"):
                 with st.spinner("AI正在分析..."):
                     agent = init_agent()
                     logger.info(f"🔑 当前会话ID: {agent.current_session_id}")
-                    
-                    result = agent.analyze(user_input, chat_history=st.session_state['messages'][:-1])
-                    
+
+                    result = agent.analyze(
+                        user_input, chat_history=st.session_state['messages'][:-1])
+
                     if result['success']:
                         answer = result['answer']
                         st.write(answer)
-                        
+
                         # 添加到历史
-                        st.session_state['messages'].append(AIMessage(content=answer))
+                        st.session_state['messages'].append(
+                            AIMessage(content=answer))
                     else:
                         error_msg = f"分析失败: {result.get('error', '未知错误')}"
                         st.error(error_msg)
-                        st.session_state['messages'].append(AIMessage(content=error_msg))
-            
+                        st.session_state['messages'].append(
+                            AIMessage(content=error_msg))
+
             st.rerun()
 
 
 if __name__ == "__main__":
     main()
-
