@@ -7,6 +7,26 @@ Agent编排器 (LangGraph版)
 作者: Log Analysis Team
 """
 
+from src.storage_layer.vector_search import VectorSearchEngine
+from src.storage_layer.keyword_search import KeywordSearchEngine
+from src.agent_layer.tools.log_tools import (
+    ALL_TOOLS,
+    init_tools,
+    query_logs_by_time_range,
+    search_error_keywords,
+    semantic_search_logs,
+    filter_logs_by_tag,
+    get_log_context,
+    get_error_statistics
+)
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import ToolNode
+from langgraph.graph.message import add_messages
+from langgraph.graph import StateGraph, END
+from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage, ToolMessage
+from langchain_openai import ChatOpenAI
+import logging
 import os
 import yaml
 import functools
@@ -18,34 +38,12 @@ from loguru import logger
 # Loguru intercepts standard library logging and tries to format strings with braces
 logger.remove()  # Remove all handlers
 # Add back a simple handler without interception
-logger.add(lambda msg: print(msg, end=""), format="{time:HH:mm:ss} | {level} | {message}")
+logger.add(lambda msg: print(msg, end=""),
+           format="{time:HH:mm:ss} | {level} | {message}")
 
 # Disable Loguru's interception of standard library logging
-import logging
 logging.getLogger("langchain").setLevel(logging.WARNING)
 logging.getLogger("langgraph").setLevel(logging.WARNING)
-
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
-
-from langgraph.graph import StateGraph, END
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
-from langgraph.checkpoint.memory import MemorySaver
-
-from src.agent_layer.tools.log_tools import (
-    ALL_TOOLS, 
-    init_tools,
-    query_logs_by_time_range,
-    search_error_keywords,
-    semantic_search_logs,
-    filter_logs_by_tag,
-    get_log_context,
-    get_error_statistics
-)
-from src.storage_layer.keyword_search import KeywordSearchEngine
-from src.storage_layer.vector_search import VectorSearchEngine
 
 
 class AgentState(TypedDict):
@@ -90,7 +88,7 @@ class LogAnalysisAgent:
         # 初始化LLM
         logger.info("Initializing LLM...")
         self.llm = self._init_llm()
-        
+
         # 绑定工具到LLM
         self.llm_with_tools = self.llm.bind_tools(ALL_TOOLS)
 
@@ -144,8 +142,6 @@ class LogAnalysisAgent:
             base_url=base_url
         )
 
-
-
     # --- Node Functions ---
 
     def call_model(self, state: AgentState):
@@ -159,30 +155,31 @@ class LogAnalysisAgent:
         import uuid
         try:
             messages = state['messages']
-            
+
             # 获取上一个AIMessage（发起关键词搜索的那个）
             last_ai_message = messages[-2]
-            
+
             if not hasattr(last_ai_message, 'tool_calls') or not last_ai_message.tool_calls:
                 return {"messages": [AIMessage(content="无法执行Fallback：未找到原始工具调用")]}
 
             tool_call = last_ai_message.tool_calls[0]
             print(f"DEBUG: Tool Call Args: {tool_call.get('args')}")
-            
+
             # 尝试获取 keywords，兼容不同的参数名（有些模型可能会用 query 甚至其他）
             keywords = tool_call['args'].get('keywords')
             if not keywords:
-                 keywords = tool_call['args'].get('query')
+                keywords = tool_call['args'].get('query')
             if not keywords:
-                 # 最后的尝试：取第一个参数值
-                 if tool_call['args']:
-                     keywords = list(tool_call['args'].values())[0]
-            
+                # 最后的尝试：取第一个参数值
+                if tool_call['args']:
+                    keywords = list(tool_call['args'].values())[0]
+
             if not keywords:
-                 return {"messages": [AIMessage(content="无法执行Fallback：无法提取搜索关键词")]}
-            
-            print(f"Using fallback: Keyword search failed for '{keywords}', trying semantic search.")
-            
+                return {"messages": [AIMessage(content="无法执行Fallback：无法提取搜索关键词")]}
+
+            print(
+                f"Using fallback: Keyword search failed for '{keywords}', trying semantic search.")
+
             # 构造新的AIMessage，调用semantic_search_logs
             new_tool_call_id = str(uuid.uuid4())
             new_tool_call = {
@@ -191,14 +188,13 @@ class LogAnalysisAgent:
                 'id': new_tool_call_id,
                 'type': 'tool_call'
             }
-            
+
             return {"messages": [AIMessage(content=f"关键词 '{keywords}' 未搜索到结果，尝试使用语义搜索...", tool_calls=[new_tool_call])]}
-            
+
         except Exception as e:
-            logger.error(f"Error in node_fallback_to_semantic: {e}", exc_info=True)
+            logger.error(
+                f"Error in node_fallback_to_semantic: {e}", exc_info=True)
             return {"messages": [AIMessage(content=f"Fallback执行出错: {str(e)}")]}
-
-
 
     # --- Routing Logic ---
 
@@ -213,7 +209,7 @@ class LogAnalysisAgent:
 
         tool_call = last_message.tool_calls[0]
         tool_name = tool_call['name']
-        
+
         # 映射工具名到节点名
         tool_node_map = {
             "query_logs_by_time_range": "node_time_query",
@@ -223,25 +219,25 @@ class LogAnalysisAgent:
             "get_log_context": "node_context",
             "get_error_statistics": "node_stats"
         }
-        
+
         node_name = tool_node_map.get(tool_name)
-        
+
         if node_name:
             return node_name
-            
+
         logger.warning(f"Unknown tool called: {tool_name}, stopping.")
         return "end"
 
     def check_search_result(self, state: AgentState) -> str:
         """检查搜索结果，决定是否Fallback"""
         messages = state['messages']
-        last_message = messages[-1] # ToolMessage
-        
+        last_message = messages[-1]  # ToolMessage
+
         # 检查工具输出
         # 如果包含 "没有找到" (log_tools.py 中的标准回复)，则认为搜索失败
         if "没有找到" in last_message.content or "found 0" in last_message.content.lower():
             return "fallback"
-            
+
         return "agent"
 
     def _create_graph(self):
@@ -279,15 +275,19 @@ class LogAnalysisAgent:
         workflow.add_node("agent", self.call_model)
 
         # 2. 添加工具节点 - 直接使用ToolNode
-        workflow.add_node("node_time_query", ToolNode([query_logs_by_time_range]))
-        workflow.add_node("node_search_keywords", ToolNode([search_error_keywords]))
-        workflow.add_node("node_semantic_search", ToolNode([semantic_search_logs]))
+        workflow.add_node("node_time_query", ToolNode(
+            [query_logs_by_time_range]))
+        workflow.add_node("node_search_keywords",
+                          ToolNode([search_error_keywords]))
+        workflow.add_node("node_semantic_search",
+                          ToolNode([semantic_search_logs]))
         workflow.add_node("node_filter", ToolNode([filter_logs_by_tag]))
         workflow.add_node("node_context", ToolNode([get_log_context]))
         workflow.add_node("node_stats", ToolNode([get_error_statistics]))
-        
+
         # 3. 添加Fallback节点
-        workflow.add_node("node_fallback_to_semantic", self.node_fallback_to_semantic)
+        workflow.add_node("node_fallback_to_semantic",
+                          self.node_fallback_to_semantic)
 
         # 4. 设置入口
         workflow.set_entry_point("agent")
@@ -306,7 +306,7 @@ class LogAnalysisAgent:
                 "end": END
             }
         )
-        
+
         # 6. 添加Smart Edges (Fallback逻辑)
         # node_search_keywords -> check_search_result -> [agent, node_fallback_to_semantic]
         workflow.add_conditional_edges(
@@ -317,7 +317,7 @@ class LogAnalysisAgent:
                 "fallback": "node_fallback_to_semantic"
             }
         )
-        
+
         # Fallback节点生成semantic search调用，直接连向semantic search工具节点
         workflow.add_edge("node_fallback_to_semantic", "node_semantic_search")
 
@@ -363,26 +363,28 @@ class LogAnalysisAgent:
             # 这里我们简单判断：如果是第一次，MemorySaver里也没东西，我们先发SystemMessage?
             # 实际上LangGraph的状态是持久化的，我们可以每次都把SystemMessage作为第一个消息传进去吗？
             # 更好的做法是让LLM bind tools时如果不包含system prompt，就在这里加
-            
+
             # 获取System Prompt
             agent_config = self.config.get('agent', {})
-            system_prompt_content = agent_config.get('system_prompt', "You are a helpful assistant.")
+            system_prompt_content = agent_config.get(
+                'system_prompt', "You are a helpful assistant.")
 
             # 获取当前状态
             current_state = self.graph.get_state(config)
-            
+
             input_messages = []
             # Only add SystemMessage if this is a new conversation (empty state)
             if not current_state.values or len(current_state.values.get('messages', [])) == 0:
-                input_messages.append(SystemMessage(content=system_prompt_content))
-            
+                input_messages.append(SystemMessage(
+                    content=system_prompt_content))
+
             input_messages.append(HumanMessage(content=query))
 
             # 使用 stream 获取节点执行信息
             logger.info("="*80)
             logger.info("开始执行 Graph...")
             logger.info("="*80)
-            
+
             final_messages = []
             for event in self.graph.stream(
                 {"messages": input_messages},
@@ -392,40 +394,46 @@ class LogAnalysisAgent:
                 # event 是一个字典: {node_name: node_output}
                 for node_name, node_output in event.items():
                     # 记录节点执行
-                    logger.info(f"======================== Node: {node_name} ========================")
-                    
+                    logger.info(
+                        f"======================== Node: {node_name} ========================")
+
                     if isinstance(node_output, dict):
                         # 打印更新的键
-                        logger.info(f"  Updated keys: {list(node_output.keys())}")
-                        
+                        logger.info(
+                            f"  Updated keys: {list(node_output.keys())}")
+
                         # 如果有 messages，记录消息数量
                         if 'messages' in node_output:
                             messages = node_output['messages']
                             logger.info(f"  Added {len(messages)} message(s)")
-                            
+
                             # 记录最后一条消息的类型和简要内容
                             if messages:
                                 last_msg = messages[-1]
                                 msg_type = type(last_msg).__name__
                                 logger.info(f"  Last message type: {msg_type}")
-                                
+
                                 # 如果有 tool_calls，记录工具名
                                 if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
-                                    tool_names = [tc.get('name', 'unknown') for tc in last_msg.tool_calls]
-                                    logger.info(f"  Tool calls: {', '.join(tool_names)}")
-                                
+                                    tool_names = [
+                                        tc.get('name', 'unknown') for tc in last_msg.tool_calls]
+                                    logger.info(
+                                        f"  Tool calls: {', '.join(tool_names)}")
+
                                 # 如果有内容，记录预览
                                 if hasattr(last_msg, 'content') and last_msg.content:
-                                    content_preview = str(last_msg.content)[:100].replace('\n', ' ')
-                                    logger.info(f"  Content preview: {content_preview}...")
+                                    content_preview = str(last_msg.content)[
+                                        :100].replace('\n', ' ')
+                                    logger.info(
+                                        f"  Content preview: {content_preview}...")
                     else:
                         logger.info(f"  Update: {node_output}")
-                    
+
                     logger.info("="*70)
-            
+
             logger.info("Graph 执行完成")
             logger.info("="*80)
-            
+
             # 获取完整的最终状态
             complete_state = self.graph.get_state(config)
             final_messages = complete_state.values.get("messages", [])
@@ -585,14 +593,14 @@ def main():
 
     # 加载日志
     print("\n=== 加载测试日志 ===")
-    
+
     # Clear previous session to avoid message accumulation
     try:
         agent.clear_session("test_graph_session")
         print("✅ Cleared previous session state")
     except:
         pass
-    
+
     load_result = agent.load_logs(
         str(sample_path), session_id="test_graph_session")
     print(f"加载结果: {load_result['message']}")
@@ -601,35 +609,29 @@ def main():
         print(f"总日志数: {stats.get('total_count', 0)}")
         print(f"级别分布: {stats.get('level_distribution', {})}")
 
-    # 测试查询
+    # 测试查询1
     print("\n=== 测试查询1: 查找崩溃 ===")
-    result1 = agent.analyze("帮我查找所有崩溃相关的日志")
+    result1 = agent.analyze("查找所有崩溃(Crash)相关的日志")
     print(f"\nAgent回答:\n{result1['answer']}\n")
 
     # 测试查询2
     print("\n=== 测试查询2: 分析时间段 ===")
-    result2 = agent.analyze("分析一下14:28:45到14:28:50之间发生了什么")
+    result2 = agent.analyze("分析14:00到14:30之间的错误")
     print(f"\nAgent回答:\n{result2['answer']}\n")
 
-    # 测试查询3
-    print("\n=== 测试查询3: 相机问题 ===")
-    result3 = agent.analyze("CameraService有什么异常吗?")
+    # 测试查询3: 测试Fallback
+    print("\n=== 测试查询3: Search Fallback (Keyword -> Semantic) ===")
+    # 这里的关键词 'weird_glitch_888' 肯定不存在，应该触发Fallback
+    result3 = agent.analyze("帮我查找包含 'weird_glitch_888' 的日志，或者任何看起来奇怪的错误")
     print(f"\nAgent回答:\n{result3['answer']}\n")
 
-
-    # 测试查询4: 测试Fallback
-    print("\n=== 测试查询4: Search Fallback (Keyword -> Semantic) ===")
-    # 这里的关键词 'weird_glitch_888' 肯定不存在，应该触发Fallback
-    result4 = agent.analyze("帮我查找包含 'weird_glitch_888' 的日志，或者任何看起来奇怪的错误")
-    print(f"\nAgent回答:\n{result4['answer']}\n")
-    
     # 检查中间步骤是否包含Fallback
     fallback_occurred = False
-    for msg in result4['messages']:
+    for msg in result3['messages']:
         if isinstance(msg, AIMessage) and "尝试使用语义搜索" in msg.content:
             fallback_occurred = True
             break
-    
+
     if fallback_occurred:
         print("✅ 检测到Fallback机制成功触发！")
     else:

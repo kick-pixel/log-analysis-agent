@@ -100,10 +100,6 @@ def init_agent():
             db_path=str(project_root / "data" / "logs.db"),
             vector_db_path=str(project_root / "data" / "chroma_db")
         )
-        # agent = LogAnalysisAgent(
-        #     db_path="./data/test_graph_agent_logs.db",
-        #     vector_db_path="./data/test_graph_agent_chroma"
-        # )
 
         # 保存到session_state（单例模式）
         st.session_state['agent_instance'] = agent

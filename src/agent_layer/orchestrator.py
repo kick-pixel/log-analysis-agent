@@ -363,18 +363,13 @@ def main():
 
     # 测试查询
     print("\n=== 测试查询1: 查找崩溃 ===")
-    result1 = agent.analyze("帮我查找所有崩溃相关的日志")
+    result1 = agent.analyze("查找所有崩溃(Crash)相关的日志")
     print(f"\nAgent回答:\n{result1['answer']}\n")
 
     # 测试查询2
     print("\n=== 测试查询2: 分析时间段 ===")
-    result2 = agent.analyze("分析一下14:28:45到14:28:50之间发生了什么")
+    result2 = agent.analyze("分析14:00到14:30之间的错误")
     print(f"\nAgent回答:\n{result2['answer']}\n")
-
-    # 测试查询3
-    print("\n=== 测试查询3: 相机问题 ===")
-    result3 = agent.analyze("CameraService有什么异常吗?")
-    print(f"\nAgent回答:\n{result3['answer']}\n")
 
 
 if __name__ == "__main__":
